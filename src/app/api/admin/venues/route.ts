@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { db } from '~/lib/db'
 import { venues } from '~/lib/db/schema'
 import { jsonError, parseBody, requireSession } from '~/lib/api-utils'
+import { loadTenantVenuesWithCourts } from '~/lib/venue-queries'
 
 const venueSchema = z.object({
   name: z.string().trim().min(2).max(255),
@@ -28,10 +29,7 @@ export async function GET() {
   const { session, response } = await requireSession()
   if (response) return response
 
-  const rows = await db.query.venues.findMany({
-    where: eq(venues.tenantId, session.user.id),
-    with: { courts: true },
-  })
+  const rows = await loadTenantVenuesWithCourts(session.user.id)
   return NextResponse.json(rows)
 }
 

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '~/lib/db'
-import { courts } from '~/lib/db/schema'
+import { courts, venues } from '~/lib/db/schema'
 import { jsonError, parseBody, requireSession } from '~/lib/api-utils'
 
 const courtUpdateSchema = z.object({
@@ -15,12 +15,21 @@ type Params = { params: Promise<{ courtId: string }> }
 
 /** Loads a court and verifies its venue belongs to the tenant. */
 async function requireOwnedCourt(courtId: string, tenantId: string) {
-  const court = await db.query.courts.findFirst({
-    where: eq(courts.id, courtId),
-    with: { venue: { columns: { tenantId: true } } },
-  })
+  const [court] = await db
+    .select({
+      id: courts.id,
+      venueId: courts.venueId,
+      name: courts.name,
+      type: courts.type,
+      pricePerHour: courts.pricePerHour,
+      tenantId: venues.tenantId,
+    })
+    .from(courts)
+    .innerJoin(venues, eq(courts.venueId, venues.id))
+    .where(eq(courts.id, courtId))
+    .limit(1)
   if (!court) return { court: null, response: jsonError(404, 'Court not found') } as const
-  if (court.venue.tenantId !== tenantId) {
+  if (court.tenantId !== tenantId) {
     return { court: null, response: jsonError(403, 'Forbidden') } as const
   }
   return { court, response: null } as const

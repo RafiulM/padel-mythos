@@ -19,14 +19,15 @@ export async function GET(
     return jsonError(400, 'Query param "date" required as YYYY-MM-DD')
   }
 
-  const venue = await db.query.venues.findFirst({
-    where: eq(venues.slug, slug),
-    columns: { id: true, openHour: true, closeHour: true },
-    with: { courts: { columns: { id: true } } },
-  })
+  const [venue] = await db
+    .select({ id: venues.id, openHour: venues.openHour, closeHour: venues.closeHour })
+    .from(venues)
+    .where(eq(venues.slug, slug))
+    .limit(1)
   if (!venue) return jsonError(404, 'Venue not found')
 
-  const courtIds = venue.courts.map((c) => c.id)
+  const venueCourts = await db.select({ id: courts.id }).from(courts).where(eq(courts.venueId, venue.id))
+  const courtIds = venueCourts.map((c) => c.id)
   const rows = courtIds.length
     ? await db
         .select({

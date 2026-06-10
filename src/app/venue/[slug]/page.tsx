@@ -1,9 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { eq } from 'drizzle-orm'
-import { db } from '~/lib/db'
-import { venues } from '~/lib/db/schema'
 import type { Venue } from '~/lib/data'
+import { loadVenueWithCourtsBySlug } from '~/lib/venue-queries'
 import { VenueClient } from './venue-client'
 
 interface VenuePageProps {
@@ -11,28 +9,7 @@ interface VenuePageProps {
 }
 
 async function loadVenue(slug: string): Promise<Venue | null> {
-  const venue = await db.query.venues.findFirst({
-    where: eq(venues.slug, slug),
-    columns: {
-      id: true,
-      name: true,
-      slug: true,
-      address: true,
-      whatsapp: true,
-      openHour: true,
-      closeHour: true,
-      bankName: true,
-      bankNumber: true,
-      bankHolder: true,
-      qrisUrl: true,
-      paymentNotes: true,
-    },
-    with: {
-      courts: {
-        columns: { id: true, name: true, type: true, pricePerHour: true },
-      },
-    },
-  })
+  const venue = await loadVenueWithCourtsBySlug(slug)
   return venue ?? null
 }
 

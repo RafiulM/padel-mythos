@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { db } from '~/lib/db'
 import { venues } from '~/lib/db/schema'
 import { jsonError, parseBody, requireOwnedVenue, requireSession } from '~/lib/api-utils'
+import { loadVenueWithCourtsById } from '~/lib/venue-queries'
 
 const venueUpdateSchema = z.object({
   name: z.string().trim().min(2).max(255).optional(),
@@ -35,10 +36,7 @@ export async function GET(_req: Request, { params }: Params) {
   const { response: ownError } = await requireOwnedVenue(venueId, session.user.id)
   if (ownError) return ownError
 
-  const venue = await db.query.venues.findFirst({
-    where: eq(venues.id, venueId),
-    with: { courts: true },
-  })
+  const venue = await loadVenueWithCourtsById(venueId)
   return NextResponse.json(venue)
 }
 
@@ -65,10 +63,7 @@ export async function PATCH(req: Request, { params }: Params) {
 
   await db.update(venues).set(data).where(eq(venues.id, venueId))
 
-  const updated = await db.query.venues.findFirst({
-    where: eq(venues.id, venueId),
-    with: { courts: true },
-  })
+  const updated = await loadVenueWithCourtsById(venueId)
   return NextResponse.json(updated)
 }
 
