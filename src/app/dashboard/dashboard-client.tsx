@@ -1,21 +1,21 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   STATUS_LABEL,
-  VENUES,
   dateLabel,
   fmtHour,
   fmtRp,
   fmtRpShort,
-  seedBookings,
   upcomingDates,
   type Booking,
   type BookingStatus,
   type Court,
   type Venue,
 } from '~/lib/data'
+import { signOut } from '~/lib/auth-client'
 
 type Tab = 'booking' | 'kalender' | 'lapangan' | 'pembayaran'
 
@@ -92,27 +92,77 @@ const TABS: Array<{ key: Tab; label: string; icon: IconName }> = [
   { key: 'pembayaran', label: 'Pembayaran', icon: 'card' },
 ]
 
+/* ---------- API helpers ---------- */
+
+interface AdminBookingRow extends Omit<Booking, 'courtId'> {
+  court: { id: string; name: string }
+  venue: { id: string; name: string; slug: string }
+}
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(path, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.error ?? `Request failed (${res.status})`)
+  }
+  return res.json()
+}
+
 export function DashboardClient() {
-  const [venueId, setVenueId] = useState(VENUES[0].id)
+  const router = useRouter()
+  const [venues, setVenues] = useState<Venue[] | null>(null)
+  const [venueId, setVenueId] = useState<string | null>(null)
+  const [bookings, setBookings] = useState<Booking[]>([])
   const [tab, setTab] = useState<Tab>('booking')
+  const [error, setError] = useState<string | null>(null)
 
-  // frontend-only state: courts + bookings per venue, seeded from mock data
-  const [venueCourts, setVenueCourts] = useState<Record<string, Court[]>>(() =>
-    Object.fromEntries(VENUES.map((v) => [v.id, v.courts])),
-  )
-  const [venueBookings, setVenueBookings] = useState<Record<string, Booking[]>>(() =>
-    Object.fromEntries(VENUES.map((v) => [v.id, seedBookings(v)])),
-  )
+  // initial load: venues
+  useEffect(() => {
+    api<Venue[]>('/api/admin/venues')
+      .then((rows) => {
+        setVenues(rows)
+        setVenueId(rows[0]?.id ?? null)
+      })
+      .catch((e) => setError(e.message))
+  }, [])
 
-  const venue = VENUES.find((v) => v.id === venueId)!
-  const courts = venueCourts[venueId]
-  const bookings = venueBookings[venueId]
+  // bookings for the active venue
+  const loadBookings = useCallback(async (vid: string) => {
+    const rows = await api<AdminBookingRow[]>(`/api/admin/bookings?venueId=${vid}`)
+    setBookings(rows.map(({ court, venue: _v, ...rest }) => ({ ...rest, courtId: court.id })))
+  }, [])
 
-  const setBookings = (next: Booking[]) => setVenueBookings({ ...venueBookings, [venueId]: next })
-  const setCourts = (next: Court[]) => setVenueCourts({ ...venueCourts, [venueId]: next })
+  useEffect(() => {
+    if (venueId) loadBookings(venueId).catch((e) => setError(e.message))
+  }, [venueId, loadBookings])
 
-  const setStatus = (id: string, status: BookingStatus) =>
-    setBookings(bookings.map((b) => (b.id === id ? { ...b, status } : b)))
+  const venue = venues?.find((v) => v.id === venueId) ?? null
+  const courts = venue?.courts ?? []
+
+  const setStatus = async (id: string, status: BookingStatus) => {
+    try {
+      await api(`/api/admin/bookings/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
+      setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status } : b)))
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
+  const updateVenue = (next: Venue) =>
+    setVenues((vs) => (vs ? vs.map((v) => (v.id === next.id ? { ...v, ...next } : v)) : vs))
+
+  const setCourts = (nextCourts: Court[]) => {
+    if (venue) updateVenue({ ...venue, courts: nextCourts })
+  }
+
+  const logout = async () => {
+    await signOut()
+    router.push('/login')
+    router.refresh()
+  }
 
   const pendingCount = bookings.filter((b) => b.status === 'PENDING').length
 
@@ -132,12 +182,29 @@ export function DashboardClient() {
   )
 
   const venueSelect = (
-    <select className="db-venue-select" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
-      {VENUES.map((v) => (
+    <select className="db-venue-select" value={venueId ?? ''} onChange={(e) => setVenueId(e.target.value)}>
+      {(venues ?? []).map((v) => (
         <option key={v.id} value={v.id}>{v.name}</option>
       ))}
     </select>
   )
+
+  if (venues === null) {
+    return <div className="db-root"><main className="db-main"><div className="db-empty">Memuat dashboard…</div></main></div>
+  }
+
+  if (!venue) {
+    return (
+      <div className="db-root">
+        <main className="db-main">
+          <div className="db-empty">
+            <Icon name="court" size={22} />
+            <span>Belum ada venue. Buat venue pertama Anda melalui API atau hubungi support.</span>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="db-root">
@@ -156,7 +223,7 @@ export function DashboardClient() {
           <Link href={`/venue/${venue.slug}`} className="db-public-link">
             padelin.id/venue/{venue.slug} ↗
           </Link>
-          <Link href="/login" className="db-logout">Keluar</Link>
+          <button className="db-logout" onClick={logout}>Keluar</button>
         </div>
       </aside>
 
@@ -170,12 +237,24 @@ export function DashboardClient() {
       </div>
 
       <main className="db-main">
+        {error ? (
+          <div className="db-card" style={{ borderColor: 'var(--danger, #c00)' }}>
+            <div className="db-card-head">
+              <div className="db-card-sub">{error}</div>
+              <button className="db-act" onClick={() => setError(null)}>Tutup</button>
+            </div>
+          </div>
+        ) : null}
         {tab === 'booking' ? (
           <BookingTab venue={venue} courts={courts} bookings={bookings} onSetStatus={setStatus} />
         ) : null}
         {tab === 'kalender' ? <CalendarTab venue={venue} courts={courts} bookings={bookings} /> : null}
-        {tab === 'lapangan' ? <CourtsTab courts={courts} onChange={setCourts} /> : null}
-        {tab === 'pembayaran' ? <PaymentTab venue={venue} /> : null}
+        {tab === 'lapangan' ? (
+          <CourtsTab venueId={venue.id} courts={courts} onChange={setCourts} onError={setError} />
+        ) : null}
+        {tab === 'pembayaran' ? (
+          <PaymentTab venue={venue} onSaved={updateVenue} onError={setError} />
+        ) : null}
       </main>
     </div>
   )
@@ -432,21 +511,62 @@ function CalRow({
 
 /* ==================== Courts tab ==================== */
 
-function CourtsTab({ courts, onChange }: { courts: Court[]; onChange: (next: Court[]) => void }) {
+interface CourtDraft {
+  id?: string
+  name: string
+  type: Court['type']
+  pricePerHour: number
+}
+
+function CourtsTab({
+  venueId,
+  courts,
+  onChange,
+  onError,
+}: {
+  venueId: string
+  courts: Court[]
+  onChange: (next: Court[]) => void
+  onError: (msg: string) => void
+}) {
   const [editing, setEditing] = useState<Court | null>(null)
   const [adding, setAdding] = useState(false)
+  const [busy, setBusy] = useState(false)
 
-  const save = (court: Court) => {
-    if (courts.some((c) => c.id === court.id)) {
-      onChange(courts.map((c) => (c.id === court.id ? court : c)))
-    } else {
-      onChange([...courts, court])
+  const save = async (draft: CourtDraft) => {
+    setBusy(true)
+    try {
+      if (draft.id) {
+        const updated = await api<Court>(`/api/admin/courts/${draft.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: draft.name, type: draft.type, pricePerHour: draft.pricePerHour }),
+        })
+        onChange(courts.map((c) => (c.id === updated.id ? updated : c)))
+      } else {
+        const created = await api<Court>(`/api/admin/venues/${venueId}/courts`, {
+          method: 'POST',
+          body: JSON.stringify(draft),
+        })
+        onChange([...courts, created])
+      }
+      setEditing(null)
+      setAdding(false)
+    } catch (e) {
+      onError((e as Error).message)
+    } finally {
+      setBusy(false)
     }
-    setEditing(null)
-    setAdding(false)
   }
 
-  const remove = (id: string) => onChange(courts.filter((c) => c.id !== id))
+  const remove = async (id: string) => {
+    if (!confirm('Hapus lapangan ini? Semua booking di lapangan ini ikut terhapus.')) return
+    try {
+      await api(`/api/admin/courts/${id}`, { method: 'DELETE' })
+      onChange(courts.filter((c) => c.id !== id))
+    } catch (e) {
+      onError((e as Error).message)
+    }
+  }
 
   return (
     <>
@@ -491,6 +611,7 @@ function CourtsTab({ courts, onChange }: { courts: Court[]; onChange: (next: Cou
           </div>
           <CourtForm
             initial={editing ?? undefined}
+            busy={busy}
             onCancel={() => { setEditing(null); setAdding(false) }}
             onSave={save}
           />
@@ -500,12 +621,22 @@ function CourtsTab({ courts, onChange }: { courts: Court[]; onChange: (next: Cou
   )
 }
 
-function CourtForm({ initial, onSave, onCancel }: { initial?: Court; onSave: (c: Court) => void; onCancel: () => void }) {
+function CourtForm({
+  initial,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  initial?: Court
+  busy: boolean
+  onSave: (c: CourtDraft) => void
+  onCancel: () => void
+}) {
   const [name, setName] = useState(initial?.name ?? '')
   const [type, setType] = useState<Court['type']>(initial?.type ?? 'Indoor')
   const [price, setPrice] = useState(initial?.pricePerHour ?? 200000)
 
-  const valid = name.trim().length >= 1 && price > 0
+  const valid = name.trim().length >= 1 && price > 0 && !busy
 
   return (
     <div className="db-form">
@@ -538,16 +669,9 @@ function CourtForm({ initial, onSave, onCancel }: { initial?: Court; onSave: (c:
         <button
           className="db-act db-act-confirm"
           disabled={!valid}
-          onClick={() =>
-            onSave({
-              id: initial?.id ?? 'c' + Math.random().toString(36).slice(2, 8),
-              name: name.trim(),
-              type,
-              pricePerHour: price,
-            })
-          }
+          onClick={() => onSave({ id: initial?.id, name: name.trim(), type, pricePerHour: price })}
         >
-          Simpan
+          {busy ? 'Menyimpan…' : 'Simpan'}
         </button>
         <button className="db-act" onClick={onCancel}>Batal</button>
       </div>
@@ -557,16 +681,42 @@ function CourtForm({ initial, onSave, onCancel }: { initial?: Court; onSave: (c:
 
 /* ==================== Payment tab ==================== */
 
-function PaymentTab({ venue }: { venue: Venue }) {
-  const [bankName, setBankName] = useState(venue.bank.name)
-  const [bankNumber, setBankNumber] = useState(venue.bank.number)
-  const [bankHolder, setBankHolder] = useState(venue.bank.holder)
-  const [qrisName, setQrisName] = useState<string | null>(null)
+function PaymentTab({
+  venue,
+  onSaved,
+  onError,
+}: {
+  venue: Venue
+  onSaved: (venue: Venue) => void
+  onError: (msg: string) => void
+}) {
+  const [bankName, setBankName] = useState(venue.bankName ?? '')
+  const [bankNumber, setBankNumber] = useState(venue.bankNumber ?? '')
+  const [bankHolder, setBankHolder] = useState(venue.bankHolder ?? '')
+  const [qrisUrl, setQrisUrl] = useState(venue.qrisUrl ?? '')
   const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
 
-  const save = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1600)
+  const save = async () => {
+    setBusy(true)
+    try {
+      const updated = await api<Venue>(`/api/admin/venues/${venue.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          bankName: bankName.trim() || null,
+          bankNumber: bankNumber.trim() || null,
+          bankHolder: bankHolder.trim() || null,
+          qrisUrl: qrisUrl.trim() || null,
+        }),
+      })
+      onSaved(updated)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1600)
+    } catch (e) {
+      onError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -608,20 +758,25 @@ function PaymentTab({ venue }: { venue: Venue }) {
         <div className="db-card-head">
           <div>
             <div className="db-card-title">QRIS</div>
-            <div className="db-card-sub">Unggah gambar kode QRIS milik venue Anda.</div>
+            <div className="db-card-sub">URL gambar kode QRIS milik venue Anda.</div>
           </div>
         </div>
         <div className="db-form">
-          <div className="pb-qris-ph" style={{ width: 200, height: 200 }}>
-            <span>{qrisName ?? 'belum ada gambar QRIS'}</span>
-          </div>
-          <label className="db-act" style={{ width: 'fit-content', cursor: 'pointer' }}>
-            {qrisName ? 'Ganti Gambar' : 'Unggah QRIS'}
+          {qrisUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qrisUrl} alt="QRIS" style={{ width: 200, height: 200, objectFit: 'contain' }} />
+          ) : (
+            <div className="pb-qris-ph" style={{ width: 200, height: 200 }}>
+              <span>belum ada gambar QRIS</span>
+            </div>
+          )}
+          <label className="pb-field">
+            <span className="pb-field-label">URL gambar QRIS</span>
             <input
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={(e) => setQrisName(e.target.files?.[0]?.name ?? null)}
+              className="pb-input"
+              placeholder="https://…/qris.png"
+              value={qrisUrl}
+              onChange={(e) => setQrisUrl(e.target.value)}
             />
           </label>
         </div>
@@ -630,8 +785,8 @@ function PaymentTab({ venue }: { venue: Venue }) {
 
       <div className="db-card">
         <div className="db-booking-actions">
-          <button className="db-act db-act-confirm" onClick={save}>
-            {saved ? 'Tersimpan ✓' : 'Simpan Perubahan'}
+          <button className="db-act db-act-confirm" disabled={busy} onClick={save}>
+            {saved ? 'Tersimpan ✓' : busy ? 'Menyimpan…' : 'Simpan Perubahan'}
           </button>
         </div>
       </div>

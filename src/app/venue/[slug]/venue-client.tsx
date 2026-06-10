@@ -1,26 +1,23 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  newBookingCode,
-  slotTaken,
+  fmtOpenHours,
   upcomingDates,
-  venueBySlug,
+  type Availability,
   type Court,
   type DateOption,
+  type Venue,
 } from '~/lib/data'
 import { BookingSheet, CourtCard, DateChip, Invoice, Slot, type BookingForm, type PlacedBooking } from '~/components/booking'
 
 interface Picked {
   court: Court
-  courtIdx: number
   dateObj: DateOption
   hour: number
 }
 
-export function VenueClient({ slug }: { slug: string }) {
-  const venue = venueBySlug(slug)!
-
+export function VenueClient({ venue }: { venue: Venue }) {
   const dates = useMemo(() => upcomingDates(7), [])
   const hours = useMemo(
     () => Array.from({ length: venue.closeHour - venue.openHour }, (_, i) => venue.openHour + i),
@@ -31,30 +28,78 @@ export function VenueClient({ slug }: { slug: string }) {
   const [courtIdx, setCourtIdx] = useState(0)
   const [picked, setPicked] = useState<Picked | null>(null)
   const [booking, setBooking] = useState<PlacedBooking | null>(null)
-  // locally-made bookings (frontend-only): "courtId|date|hour" → true
-  const [localBookings, setLocalBookings] = useState<Record<string, boolean>>({})
+  const [availability, setAvailability] = useState<Availability | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  const isFree = (cIdx: number, hour: number) =>
-    !slotTaken(cIdx, dates[dateIdx].key, hour) &&
-    !localBookings[`${venue.courts[cIdx].id}|${dates[dateIdx].key}|${hour}`]
+  const dateKey = dates[dateIdx].key
 
-  const freeCount = (cIdx: number) => hours.filter((h) => isFree(cIdx, h)).length
+  const loadAvailability = useCallback(async (date: string) => {
+    setAvailability(null)
+    const res = await fetch(`/api/venues/${venue.slug}/availability?date=${date}`)
+    if (res.ok) setAvailability(await res.json())
+  }, [venue.slug])
 
-  const isFreeAtPicked = (hour: number) =>
-    picked !== null &&
-    !slotTaken(picked.courtIdx, picked.dateObj.key, hour) &&
-    !localBookings[`${picked.court.id}|${picked.dateObj.key}|${hour}`]
+  useEffect(() => {
+    loadAvailability(dateKey)
+  }, [dateKey, loadAvailability])
 
-  const submit = (form: BookingForm) => {
+  const takenFor = (courtId: string) =>
+    availability?.courts.find((c) => c.courtId === courtId)?.takenHours ?? []
+
+  const isFree = (court: Court, hour: number) =>
+    availability !== null && !takenFor(court.id).includes(hour)
+
+  const freeCount = (court: Court) => hours.filter((h) => isFree(court, h)).length
+
+  const isFreeAtPicked = (hour: number) => picked !== null && isFree(picked.court, hour)
+
+  const submit = async (form: BookingForm) => {
     if (!picked) return
-    const b: PlacedBooking = { ...picked, ...form, code: newBookingCode() }
-    const next = { ...localBookings }
-    for (let i = 0; i < form.duration; i++) {
-      next[`${picked.court.id}|${picked.dateObj.key}|${picked.hour + i}`] = true
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courtId: picked.court.id,
+          customerName: form.name,
+          customerWa: form.wa.replace(/[\s-]/g, ''),
+          date: picked.dateObj.key,
+          startHour: picked.hour,
+          duration: form.duration,
+          notes: form.notes.trim() || undefined,
+        }),
+      })
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        setSubmitError(
+          res.status === 409
+            ? 'Slot baru saja terisi oleh pelanggan lain. Silakan pilih jam lain.'
+            : (body?.error ?? 'Booking gagal, coba lagi.'),
+        )
+        loadAvailability(dateKey)
+        return
+      }
+
+      const created: { code: string; totalPrice: number } = await res.json()
+      setBooking({
+        ...form,
+        total: created.totalPrice,
+        code: created.code,
+        court: picked.court,
+        dateObj: picked.dateObj,
+        hour: picked.hour,
+      })
+      setPicked(null)
+      loadAvailability(dateKey)
+    } catch {
+      setSubmitError('Jaringan bermasalah, coba lagi.')
+    } finally {
+      setSubmitting(false)
     }
-    setLocalBookings(next)
-    setPicked(null)
-    setBooking(b)
   }
 
   return (
@@ -70,7 +115,7 @@ export function VenueClient({ slug }: { slug: string }) {
               <h1 className="pb-venue-name">{venue.name}</h1>
               <div className="pb-venue-meta">
                 <span>{venue.address}</span>
-                <span className="pb-venue-hours">Buka {venue.hours}</span>
+                <span className="pb-venue-hours">Buka {fmtOpenHours(venue)}</span>
               </div>
             </div>
 
@@ -90,7 +135,7 @@ export function VenueClient({ slug }: { slug: string }) {
                   key={c.id}
                   court={c}
                   active={i === courtIdx}
-                  freeCount={freeCount(i)}
+                  freeCount={freeCount(c)}
                   onClick={() => setCourtIdx(i)}
                 />
               ))}
@@ -109,16 +154,18 @@ export function VenueClient({ slug }: { slug: string }) {
                 <Slot
                   key={h}
                   hour={h}
-                  taken={!isFree(courtIdx, h)}
+                  taken={!isFree(venue.courts[courtIdx], h)}
                   onClick={() =>
-                    setPicked({ court: venue.courts[courtIdx], courtIdx, dateObj: dates[dateIdx], hour: h })
+                    setPicked({ court: venue.courts[courtIdx], dateObj: dates[dateIdx], hour: h })
                   }
                 />
               ))}
             </div>
 
             <div className="pb-foot-hint">
-              Pilih jam kosong untuk booking — tanpa akun, cukup nama &amp; nomor WhatsApp.
+              {availability === null
+                ? 'Memuat ketersediaan…'
+                : 'Pilih jam kosong untuk booking — tanpa akun, cukup nama & nomor WhatsApp.'}
             </div>
           </div>
         )}
@@ -130,7 +177,9 @@ export function VenueClient({ slug }: { slug: string }) {
             dateObj={picked.dateObj}
             hour={picked.hour}
             isFree={isFreeAtPicked}
-            onClose={() => setPicked(null)}
+            busy={submitting}
+            error={submitError}
+            onClose={() => { setPicked(null); setSubmitError(null) }}
             onSubmit={submit}
           />
         ) : null}

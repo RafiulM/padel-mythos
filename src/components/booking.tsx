@@ -64,6 +64,8 @@ export function BookingSheet({
   dateObj,
   hour,
   isFree,
+  busy,
+  error,
   onClose,
   onSubmit,
 }: {
@@ -72,6 +74,8 @@ export function BookingSheet({
   dateObj: DateOption
   hour: number
   isFree: (hour: number) => boolean
+  busy?: boolean
+  error?: string | null
   onClose: () => void
   onSubmit: (form: BookingForm) => void
 }) {
@@ -97,7 +101,7 @@ export function BookingSheet({
 
   const total = court.pricePerHour * duration
   const waValid = /^(\+?62|0)8\d{7,12}$/.test(wa.replace(/[\s-]/g, ''))
-  const valid = name.trim().length >= 2 && waValid
+  const valid = name.trim().length >= 2 && waValid && !busy
 
   return (
     <div className="pb-scrim" onClick={onClose}>
@@ -174,12 +178,14 @@ export function BookingSheet({
           <div className="pb-sheet-total-num">{fmtRp(total)}</div>
         </div>
 
+        {error ? <div className="pb-field-err">{error}</div> : null}
+
         <button
           className="pb-btn-primary"
           disabled={!valid}
           onClick={() => onSubmit({ name: name.trim(), wa, duration, notes, total })}
         >
-          Booking Sekarang
+          {busy ? 'Memproses…' : 'Booking Sekarang'}
         </button>
         <div className="pb-sheet-foot">Tanpa akun · konfirmasi pembayaran oleh admin venue</div>
       </div>
@@ -197,12 +203,13 @@ export interface PlacedBooking extends BookingForm {
 }
 
 export function Invoice({ venue, booking, onBack }: { venue: Venue; booking: PlacedBooking; onBack: () => void }) {
-  const [payTab, setPayTab] = useState<'qris' | 'bank'>('qris')
+  const hasBank = Boolean(venue.bankName && venue.bankNumber)
+  const [payTab, setPayTab] = useState<'qris' | 'bank'>(venue.qrisUrl || !hasBank ? 'qris' : 'bank')
   const [copied, setCopied] = useState(false)
 
   const copyAccount = () => {
     try {
-      navigator.clipboard.writeText(venue.bank.number)
+      navigator.clipboard.writeText(venue.bankNumber ?? '')
     } catch {}
     setCopied(true)
     setTimeout(() => setCopied(false), 1600)
@@ -238,23 +245,28 @@ export function Invoice({ venue, booking, onBack }: { venue: Venue; booking: Pla
       <div className="pb-pay-title">Cara Pembayaran</div>
       <div className="pb-seg pb-seg-pay">
         <button className={'pb-seg-btn' + (payTab === 'qris' ? ' is-active' : '')} onClick={() => setPayTab('qris')}>QRIS</button>
-        <button className={'pb-seg-btn' + (payTab === 'bank' ? ' is-active' : '')} onClick={() => setPayTab('bank')}>Transfer Bank</button>
+        <button className={'pb-seg-btn' + (payTab === 'bank' ? ' is-active' : '')} onClick={() => setPayTab('bank')} disabled={!hasBank}>Transfer Bank</button>
       </div>
 
       {payTab === 'qris' ? (
         <div className="pb-card pb-pay-card">
-          <div className="pb-qris-ph">
-            <span>gambar QRIS venue</span>
-          </div>
+          {venue.qrisUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="pb-qris-img" src={venue.qrisUrl} alt={`QRIS ${venue.name}`} style={{ width: 220, height: 220, objectFit: 'contain' }} />
+          ) : (
+            <div className="pb-qris-ph">
+              <span>venue belum mengunggah QRIS</span>
+            </div>
+          )}
           <div className="pb-pay-note">Scan dengan aplikasi bank atau e-wallet apa pun, lalu bayar {fmtRp(booking.total)}.</div>
         </div>
       ) : (
         <div className="pb-card pb-pay-card">
           <div className="pb-bank">
             <div>
-              <div className="pb-bank-name">{venue.bank.name}</div>
-              <div className="pb-bank-number">{venue.bank.number.replace(/(\d{4})(\d{3})(\d+)/, '$1 $2 $3')}</div>
-              <div className="pb-bank-holder">a.n. {venue.bank.holder}</div>
+              <div className="pb-bank-name">{venue.bankName}</div>
+              <div className="pb-bank-number">{(venue.bankNumber ?? '').replace(/(\d{4})(\d{3})(\d+)/, '$1 $2 $3')}</div>
+              <div className="pb-bank-holder">a.n. {venue.bankHolder}</div>
             </div>
             <button className="pb-copy" onClick={copyAccount}>{copied ? 'Tersalin ✓' : 'Salin'}</button>
           </div>
@@ -267,9 +279,11 @@ export function Invoice({ venue, booking, onBack }: { venue: Venue; booking: Pla
         <span className="pb-status-inline"> Dikonfirmasi</span>. Jadwal Anda otomatis terkunci.
       </div>
 
-      <a className="pb-btn-primary pb-btn-wa" href={`https://wa.me/${venue.wa}?text=${waMessage}`} target="_blank" rel="noreferrer">
-        Konfirmasi via WhatsApp
-      </a>
+      {venue.whatsapp ? (
+        <a className="pb-btn-primary pb-btn-wa" href={`https://wa.me/${venue.whatsapp}?text=${waMessage}`} target="_blank" rel="noreferrer">
+          Konfirmasi via WhatsApp
+        </a>
+      ) : null}
       <button className="pb-btn-ghost" onClick={onBack}>Kembali ke Jadwal</button>
     </div>
   )

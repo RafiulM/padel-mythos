@@ -6,3 +6,5 @@ dist/
 *.local
 .env
 .env.*
+!.env.example
+drizzle/meta/_journal.json.bak
