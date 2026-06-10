@@ -1,15 +1,11 @@
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+'use client'
+
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-export const Route = createFileRoute('/login')({
-  head: () => ({
-    meta: [{ title: 'Masuk — Padelin' }],
-  }),
-  component: LoginPage,
-})
-
-function LoginPage() {
-  const navigate = useNavigate()
+export function LoginClient() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
@@ -18,7 +14,7 @@ function LoginPage() {
   return (
     <div className="lg-page">
       <div className="lg-card">
-        <Link to="/" className="pl-logo">Padelin</Link>
+        <Link href="/" className="pl-logo">Padelin</Link>
         <div>
           <div className="lg-title">Masuk ke dashboard</div>
           <div className="lg-sub">Kelola venue, lapangan, dan konfirmasi booking pelanggan Anda.</div>
@@ -43,12 +39,12 @@ function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && valid) navigate({ to: '/dashboard' })
+              if (e.key === 'Enter' && valid) router.push('/dashboard')
             }}
           />
         </label>
 
-        <button className="pb-btn-primary" disabled={!valid} onClick={() => navigate({ to: '/dashboard' })}>
+        <button className="pb-btn-primary" disabled={!valid} onClick={() => router.push('/dashboard')}>
           Masuk
         </button>
 

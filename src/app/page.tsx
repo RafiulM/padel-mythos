@@ -1,4 +1,3 @@
-import { createFileRoute } from '@tanstack/react-router'
 import {
   Nav,
   Hero,
@@ -10,11 +9,7 @@ import {
   Footer,
 } from '~/components/landing'
 
-export const Route = createFileRoute('/')({
-  component: LandingPage,
-})
-
-function LandingPage() {
+export default function LandingPage() {
   return (
     <div className="pl-root">
       <div className="pl-grain"></div>

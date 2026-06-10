@@ -1,4 +1,4 @@
-import { Link } from '@tanstack/react-router'
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 function SectionTag({ children }: { children: ReactNode }) {
@@ -23,7 +23,7 @@ export function Nav() {
   return (
     <header className="pl-nav">
       <div className="pl-container pl-nav-inner">
-        <Link to="/" className="pl-logo">Padelin</Link>
+        <Link href="/" className="pl-logo">Padelin</Link>
         <nav className="pl-nav-links">
           <a href="#pemilik">Untuk Venue</a>
           <a href="#pemain">Untuk Pemain</a>
@@ -31,8 +31,8 @@ export function Nav() {
           <a href="#harga">Harga</a>
         </nav>
         <div className="pl-nav-actions">
-          <Link className="pl-nav-login" to="/login">Masuk</Link>
-          <Link className="pl-btn pl-btn-primary pl-btn-sm" to="/login">Daftar Gratis</Link>
+          <Link className="pl-nav-login" href="/login">Masuk</Link>
+          <Link className="pl-btn pl-btn-primary pl-btn-sm" href="/login">Daftar Gratis</Link>
         </div>
       </div>
     </header>
@@ -179,7 +179,7 @@ export function Hero() {
             satu menit. Anda tinggal konfirmasi pembayaran dari satu dashboard.
           </p>
           <div className="pl-hero-actions">
-            <Link className="pl-btn pl-btn-primary" to="/login">Daftar Gratis</Link>
+            <Link className="pl-btn pl-btn-primary" href="/login">Daftar Gratis</Link>
             <a className="pl-btn pl-btn-ghost" href="#cara-kerja">Lihat Cara Kerja</a>
           </div>
           <div className="pl-hero-stats">
@@ -383,7 +383,7 @@ export function PricingSection() {
             <li><CheckIcon /><span>Dashboard kalender & konfirmasi pembayaran</span></li>
             <li><CheckIcon /><span>Pembayaran via transfer bank / QRIS Anda sendiri</span></li>
           </ul>
-          <Link className="pl-btn pl-btn-primary pl-btn-block" to="/login">Coba Gratis 14 Hari</Link>
+          <Link className="pl-btn pl-btn-primary pl-btn-block" href="/login">Coba Gratis 14 Hari</Link>
           <div className="pl-price-note">Tanpa kartu kredit untuk memulai</div>
         </div>
       </div>
@@ -402,7 +402,7 @@ export function FinalCTA() {
           Daftarkan venue Anda hari ini. Dalam 15 menit, pelanggan sudah bisa booking sendiri.
         </p>
         <div className="pl-hero-actions" style={{ justifyContent: 'center' }}>
-          <Link className="pl-btn pl-btn-primary" to="/login">Daftar Gratis</Link>
+          <Link className="pl-btn pl-btn-primary" href="/login">Daftar Gratis</Link>
           <a className="pl-btn pl-btn-ghost" href="#cara-kerja">Lihat Cara Kerja</a>
         </div>
       </div>
@@ -420,7 +420,7 @@ export function Footer() {
           <a href="#pemain">Untuk Pemain</a>
           <a href="#cara-kerja">Cara Kerja</a>
           <a href="#harga">Harga</a>
-          <Link to="/venue/$slug" params={{ slug: 'padel-senayan' }}>Demo Venue</Link>
+          <Link href="/venue/padel-senayan">Demo Venue</Link>
         </div>
         <div className="pl-footer-copy">© 2026 Padelin</div>
       </div>

@@ -1,4 +1,6 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
+'use client'
+
+import Link from 'next/link'
 import { useMemo, useState, type ReactNode } from 'react'
 import {
   STATUS_LABEL,
@@ -14,13 +16,6 @@ import {
   type Court,
   type Venue,
 } from '~/lib/data'
-
-export const Route = createFileRoute('/dashboard')({
-  head: () => ({
-    meta: [{ title: 'Dashboard — Padelin' }],
-  }),
-  component: DashboardPage,
-})
 
 type Tab = 'booking' | 'kalender' | 'lapangan' | 'pembayaran'
 
@@ -97,7 +92,7 @@ const TABS: Array<{ key: Tab; label: string; icon: IconName }> = [
   { key: 'pembayaran', label: 'Pembayaran', icon: 'card' },
 ]
 
-function DashboardPage() {
+export function DashboardClient() {
   const [venueId, setVenueId] = useState(VENUES[0].id)
   const [tab, setTab] = useState<Tab>('booking')
 
@@ -148,7 +143,7 @@ function DashboardPage() {
     <div className="db-root">
       {/* desktop sidebar */}
       <aside className="db-side">
-        <Link to="/" className="pl-logo">Padelin</Link>
+        <Link href="/" className="pl-logo">Padelin</Link>
         <div>
           <div className="db-side-label">Venue aktif</div>
           {venueSelect}
@@ -158,17 +153,17 @@ function DashboardPage() {
           {nav}
         </nav>
         <div className="db-side-foot">
-          <Link to="/venue/$slug" params={{ slug: venue.slug }} className="db-public-link">
+          <Link href={`/venue/${venue.slug}`} className="db-public-link">
             padelin.id/venue/{venue.slug} ↗
           </Link>
-          <Link to="/login" className="db-logout">Keluar</Link>
+          <Link href="/login" className="db-logout">Keluar</Link>
         </div>
       </aside>
 
       {/* mobile top bar */}
       <div className="db-mobile-bar">
         <div className="db-mobile-top">
-          <Link to="/" className="pl-logo">Padelin</Link>
+          <Link href="/" className="pl-logo">Padelin</Link>
           {venueSelect}
         </div>
         <div className="db-mobile-nav">{nav}</div>

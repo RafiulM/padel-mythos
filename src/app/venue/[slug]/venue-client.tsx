@@ -1,4 +1,5 @@
-import { createFileRoute, notFound } from '@tanstack/react-router'
+'use client'
+
 import { useMemo, useState } from 'react'
 import {
   newBookingCode,
@@ -10,30 +11,6 @@ import {
 } from '~/lib/data'
 import { BookingSheet, CourtCard, DateChip, Invoice, Slot, type BookingForm, type PlacedBooking } from '~/components/booking'
 
-export const Route = createFileRoute('/venue/$slug')({
-  loader: ({ params }) => {
-    const venue = venueBySlug(params.slug)
-    if (!venue) throw notFound()
-    return { slug: params.slug }
-  },
-  head: ({ params }) => ({
-    meta: [{ title: `${venueBySlug(params.slug)?.name ?? 'Venue'} — Booking · Padelin` }],
-  }),
-  notFoundComponent: () => (
-    <div className="pb-page">
-      <div className="pb-app">
-        <div className="pb-screen" style={{ justifyContent: 'center', textAlign: 'center', gap: 12 }}>
-          <div className="pb-venue-name">Venue tidak ditemukan</div>
-          <div className="pb-pay-note" style={{ margin: '0 auto' }}>
-            Periksa kembali link yang Anda terima dari venue.
-          </div>
-        </div>
-      </div>
-    </div>
-  ),
-  component: VenuePage,
-})
-
 interface Picked {
   court: Court
   courtIdx: number
@@ -41,8 +18,7 @@ interface Picked {
   hour: number
 }
 
-function VenuePage() {
-  const { slug } = Route.useParams()
+export function VenueClient({ slug }: { slug: string }) {
   const venue = venueBySlug(slug)!
 
   const dates = useMemo(() => upcomingDates(7), [])
